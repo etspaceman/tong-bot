@@ -1,0 +1,29 @@
+# fly.toml app configuration file generated for kms-bot-lovcord on 2024-03-06T22:39:46-06:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'kms-bot-lovcord'
+primary_region = 'ord'
+
+[build]
+
+[env]
+  PORT = '8080'
+
+[[mounts]]
+  source = 'kms_etspaceman_data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
