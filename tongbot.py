@@ -4,10 +4,10 @@ from datetime import datetime, timedelta, timezone
 import discord
 from discord import app_commands, utils
 from discord.channel import TextChannel
-from discord.message import Message
-from discord.ext import tasks
+from discord.member import Member
 from dotenv import load_dotenv
 import re
+from typing import Sequence
 
 from messagepurge import *
 
@@ -27,7 +27,9 @@ class TongBot(discord.Client):
         await self.tree.sync(guild=GUILD_ID)
 
 
-client = TongBot(intents=discord.Intents.default())
+intents = discord.Intents.default()
+intents.members = True
+client = TongBot(intents=intents)
 
 
 def owner_only():
@@ -148,11 +150,50 @@ async def purge_messages(interaction: discord.Interaction, ttl: str):
         )
 
 
-# @owner_only()
-# @client.tree.command()
-# @app_commands.describe(months_afk="Months in which the user has been AFK")
-# async def purge_users(interaction: discord.Interaction):
-#     """Sets a task which will purge users in the server after they have been inactive for a certain period of months"""
+@owner_only()
+@app_commands.describe(dry_run="Prints users as a response rather than purging them")
+@client.tree.command()
+async def purge_users(interaction: discord.Interaction, dry_run: bool):
+    """Purges all users who are not assigned specific roles"""
+
+    patronRoleId = 1000851009553313883
+    memberRoleId = 1441237799473905684
+    deepStateRoleId = 1441184394386870424
+    modRoleId = 1196609556755787836
+    ownerRoleId = 812438462296752138
+
+    protectedRoles = [
+        patronRoleId,
+        memberRoleId,
+        modRoleId,
+        ownerRoleId,
+        deepStateRoleId,
+    ]
+
+    protectedUsers: list[Member] = []
+    usersToPurge: list[Member] = []
+    allMembers: Sequence[Member] = client.get_all_members()
+
+    for member in allMembers:
+        roleIds = list(map(lambda role: role.id, member.roles))
+        if set(protectedRoles).intersection(roleIds):
+            protectedUsers.append(member)
+        else:
+            usersToPurge.append(member)
+
+    userNamesToPurge = list(map(lambda member: member.name, usersToPurge))
+
+    if dry_run:
+        interaction.response.send_message(
+            f"Users to purge: {', '.join(userNamesToPurge)}", ephemeral=True
+        )
+    else:
+        # for user in usersToPurge:
+        #    await user.kick
+
+        interaction.response.send_message(
+            "This action is not yet implemented", ephemeral=True
+        )
 
 
 async def main():
