@@ -5,7 +5,7 @@ from discord.message import Message
 from discord.ext import tasks
 from datetime import datetime, timedelta
 
-PURGE_INTERVAL: int = 33  # in seconds
+PURGE_INTERVAL: float = 33  # in seconds
 MAX_DURATION: timedelta = timedelta(days=3333)
 MIN_DURATION: timedelta = timedelta(seconds=3)
 
@@ -17,13 +17,10 @@ async def purge_channel(
     dtime: timedelta,
     self_msg_id: int,
 ):
-    def is_self_message(msg: Message) -> bool:
-        not msg.pinned and not msg.id == self_msg_id
-
     try:
         await channel.purge(
             limit=100,
-            check=is_self_message,
+            check=lambda msg: not msg.pinned and not msg.id == self_msg_id,
             before=datetime.now() - dtime,
             oldest_first=True,
         )
@@ -53,7 +50,7 @@ async def set_purge_task_loop(channel: TextChannel, dtime: timedelta):
         formatted_duration = get_formatted_duration(MAX_DURATION)
         await channel.send(f"maximum duration to kms is {formatted_duration}.")
 
-    interval: int = (
+    interval = (
         dtime.total_seconds()
         if dtime.total_seconds() < PURGE_INTERVAL
         else PURGE_INTERVAL

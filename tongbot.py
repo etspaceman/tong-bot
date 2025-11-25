@@ -29,7 +29,10 @@ class TongBot(discord.Client):
 
 intents = discord.Intents.default()
 intents.members = True
+intents.bans = True
 client = TongBot(intents=intents)
+
+modRoleId = 1196609556755787836
 
 
 def owner_only():
@@ -39,6 +42,20 @@ def owner_only():
             await interaction.response.send_message(
                 "You are not allowed to run that command", ephemeral=True
             )
+        return is_owner
+
+    return app_commands.check(predicate)
+
+
+def owner_or_mod():
+    async def predicate(interaction: discord.Interaction) -> bool:
+        is_mod = interaction.user.get_role(modRoleId) is not None
+
+        if not is_mod:
+            await interaction.response.send_message(
+                "You are not allowed to run that command", ephemeral=True
+            )
+        return is_mod
 
     return app_commands.check(predicate)
 
@@ -105,7 +122,7 @@ async def stop_message_purge(interaction: discord.Interaction):
         )
 
 
-@owner_only()
+@owner_or_mod()
 @client.tree.command()
 @app_commands.describe(
     ttl="Time-to-live for messages in the channel. E.g. 24h, 30s, 2d, 5m"
@@ -143,6 +160,9 @@ async def purge_messages(interaction: discord.Interaction, ttl: str):
                 print(
                     f"{datetime.now(timezone.utc)} updated purge task in guild {interaction.guild}"
                 )
+                await interaction.response.send_message(
+                    "Purge loop was set", ephemeral=True
+                )
     except Exception as e:
         print(e)
         await interaction.response.send_message(
@@ -156,11 +176,13 @@ async def purge_messages(interaction: discord.Interaction, ttl: str):
 async def purge_users(interaction: discord.Interaction, dry_run: bool = False):
     """Purges all users who are not assigned specific roles"""
 
+    await interaction.response.defer(thinking=True)
+
     patronRoleId = 1000851009553313883
     memberRoleId = 1441237799473905684
     deepStateRoleId = 1441184394386870424
-    modRoleId = 1196609556755787836
     ownerRoleId = 812438462296752138
+    standardBotRoleId = 905161586589728819
 
     protectedRoles = [
         patronRoleId,
@@ -168,6 +190,7 @@ async def purge_users(interaction: discord.Interaction, dry_run: bool = False):
         modRoleId,
         ownerRoleId,
         deepStateRoleId,
+        standardBotRoleId,
     ]
 
     protectedUsers: list[Member] = []
@@ -184,16 +207,14 @@ async def purge_users(interaction: discord.Interaction, dry_run: bool = False):
     userNamesToPurge = list(map(lambda member: member.name, usersToPurge))
 
     if dry_run:
-        interaction.response.send_message(
-            f"Users to purge: {', '.join(userNamesToPurge)}", ephemeral=True
+        await interaction.followup.send(
+            f"```Users to purge: {', '.join(userNamesToPurge)}```", ephemeral=True
         )
     else:
-        # for user in usersToPurge:
-        #    await user.kick
+        for user in usersToPurge:
+            await user.kick()
 
-        interaction.response.send_message(
-            "This action is not yet implemented", ephemeral=True
-        )
+        await interaction.followup.send("Users have been kicked")
 
 
 async def main():
