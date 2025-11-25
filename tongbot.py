@@ -1,0 +1,173 @@
+import asyncio
+import os
+from datetime import datetime, timedelta, timezone
+import discord
+from discord import app_commands, utils
+from discord.channel import TextChannel
+from discord.message import Message
+from discord.ext import tasks
+from dotenv import load_dotenv
+import re
+
+from messagepurge import *
+
+GUILD_ID = discord.Object(id=771195948151603211)
+
+
+class TongBot(discord.Client):
+    # Suppress error on the User attribute being None since it fills up later
+    user: discord.ClientUser
+
+    def __init__(self, *, intents: discord.Intents):
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+
+    async def setup_hook(self):
+        self.tree.copy_global_to(guild=GUILD_ID)
+        await self.tree.sync(guild=GUILD_ID)
+
+
+client = TongBot(intents=discord.Intents.default())
+
+
+def owner_only():
+    async def predicate(interaction: discord.Interaction) -> bool:
+        is_owner = interaction.user.id == interaction.guild.owner_id
+        if not is_owner:
+            await interaction.response.send_message(
+                "You are not allowed to run that command", ephemeral=True
+            )
+
+    return app_commands.check(predicate)
+
+
+@client.event
+async def on_ready():
+    print(f"Logged in as {client.user} (ID: {client.user.id})")
+    print("------")
+
+    # check the db for existing tasks
+    tasks = await get_all_tasks_db()
+
+    # start tasks
+    for task in tasks:
+        try:
+            channel_id, dtime = task
+            channel = client.get_channel(channel_id)
+            dtime = timedelta(seconds=dtime)
+            if not channel or channel.type != discord.ChannelType.text:
+                # delete invalid data
+                print(
+                    f"channel {channel_id} is not a text channel or kms has no access to it"
+                )
+                await delete_task_db(channel_id)
+            else:
+                print(
+                    f"starting purge task in guild {channel.guild} channel {channel_id} with dtime {dtime}"
+                )
+                await set_purge_task_loop(channel, dtime)
+        except Exception as e:
+            print(f"error starting task in channel {channel_id}: {e}")
+            await delete_task_db(channel_id)
+
+    # set status
+    game = discord.Game(f"@{client.user.name} help")
+    await client.change_presence(status=discord.Status.online, activity=game)
+
+
+@client.tree.command()
+async def ping(interaction: discord.Interaction):
+    """Pings the bot"""
+    await interaction.response.send_message("pong")
+
+
+@owner_only()
+@client.tree.command()
+async def stop_message_purge(interaction: discord.Interaction):
+    """Stops the message purge of the current channel"""
+    try:
+        channel_id = interaction.channel.id
+        if channel_id in active_tasks:
+            stop_task(channel_id)
+            await delete_task_db(channel_id)
+            del active_tasks[channel_id]
+            await interaction.response.send_message(
+                "Message purging stopped in this channel."
+            )
+        else:
+            await interaction.response.send_message("Nothing to stop in this channel.")
+    except Exception as e:
+        print(e)
+        await interaction.response.send_message(
+            f"failed to stop purge task for channel: {e}", ephemeral=True
+        )
+
+
+@owner_only()
+@client.tree.command()
+@app_commands.describe(
+    ttl="Time-to-live for messages in the channel. E.g. 24h, 30s, 2d, 5m"
+)
+async def purge_messages(interaction: discord.Interaction, ttl: str):
+    """Sets a task which will purge messages in the configured channel after a given time-to-live"""
+    try:
+        if not isinstance(interaction.channel, TextChannel):
+            await interaction.response.send_message(
+                "This command only works in text channels"
+            )
+
+        else:
+            duration = re.search("\d+[smhd]", ttl)
+            dtime: timedelta | None = None
+            if not duration:
+                # invalid input
+                await interaction.response.send_message(
+                    "Invalid input for TTL.", ephemeral=True
+                )
+            else:
+                duration = duration.group(0)
+                num = re.search("\d+", duration)
+                if "s" in duration:
+                    dtime = timedelta(seconds=int(num.group(0)))
+                elif "m" in duration:
+                    dtime = timedelta(minutes=int(num.group(0)))
+                elif "d" in duration:
+                    dtime = timedelta(days=int(num.group(0)))
+                else:
+                    dtime = timedelta(hours=int(num.group(0)))
+
+                # start / restart task in a channel
+                await set_purge_task_loop(interaction.channel, dtime)
+                print(
+                    f"{datetime.now(timezone.utc)} updated purge task in guild {interaction.guild}"
+                )
+    except Exception as e:
+        print(e)
+        await interaction.response.send_message(
+            f"failed to set purge task for channel: {e}", ephemeral=True
+        )
+
+
+# @owner_only()
+# @client.tree.command()
+# @app_commands.describe(months_afk="Months in which the user has been AFK")
+# async def purge_users(interaction: discord.Interaction):
+#     """Sets a task which will purge users in the server after they have been inactive for a certain period of months"""
+
+
+async def main():
+    load_dotenv()
+    DISCORD_KEY = os.getenv("DISCORD_KEY")
+    async with client:
+        await client.start(DISCORD_KEY)
+
+
+if __name__ == "__main__":
+    utils.setup_logging()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        # nothing to do here
+        # `asyncio.run` handles the loop cleanup
+        # and `self.start` closes all sockets and the HTTPClient instance.
+        print("Bot stopped by user")
