@@ -153,7 +153,7 @@ async def purge_messages(interaction: discord.Interaction, ttl: str):
 @owner_only()
 @app_commands.describe(dry_run="Prints users as a response rather than purging them")
 @client.tree.command()
-async def purge_users(interaction: discord.Interaction, dry_run: bool):
+async def purge_users(interaction: discord.Interaction, dry_run: bool = False):
     """Purges all users who are not assigned specific roles"""
 
     patronRoleId = 1000851009553313883
