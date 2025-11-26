@@ -7,7 +7,7 @@ from discord.channel import TextChannel
 from discord.member import Member
 from dotenv import load_dotenv
 import re
-from typing import Sequence
+from typing import Sequence, Optional
 
 from messagepurge import *
 
@@ -29,10 +29,30 @@ class TongBot(discord.Client):
 
 intents = discord.Intents.default()
 intents.members = True
-intents.bans = True
+intents.moderation = True
 client = TongBot(intents=intents)
 
 modRoleId = 1196609556755787836
+
+
+class DurationTransformer(app_commands.Transformer):
+    async def transform(
+        self, interaction: discord.Interaction, value: str
+    ) -> timedelta:
+        duration = re.search("\d+[smhd]", value)
+        dtime: timedelta | None = None
+        duration = duration.group(0)
+        num = re.search("\d+", duration)
+        if "s" in duration:
+            dtime = timedelta(seconds=int(num.group(0)))
+        elif "m" in duration:
+            dtime = timedelta(minutes=int(num.group(0)))
+        elif "d" in duration:
+            dtime = timedelta(days=int(num.group(0)))
+        else:
+            dtime = timedelta(hours=int(num.group(0)))
+
+        return dtime
 
 
 def owner_only():
@@ -127,7 +147,10 @@ async def stop_message_purge(interaction: discord.Interaction):
 @app_commands.describe(
     ttl="Time-to-live for messages in the channel. E.g. 24h, 30s, 2d, 5m"
 )
-async def purge_messages(interaction: discord.Interaction, ttl: str):
+async def purge_messages(
+    interaction: discord.Interaction,
+    ttl: app_commands.Transform[timedelta, DurationTransformer],
+):
     """Sets a task which will purge messages in the configured channel after a given time-to-live"""
     try:
         if not isinstance(interaction.channel, TextChannel):
@@ -215,6 +238,23 @@ async def purge_users(interaction: discord.Interaction, dry_run: bool = False):
             await user.kick()
 
         await interaction.followup.send("Users have been kicked")
+
+
+@app_commands.describe(
+    duration="Duration in which to be timed out for. E.g. 1h, 1d",
+    reason="Optional reason for the timeout",
+)
+@client.tree.command()
+async def tmo(
+    interaction: discord.Interaction,
+    duration: app_commands.Transform[timedelta, DurationTransformer],
+    reason: Optional[str],
+):
+    """Time yourself out for a defined duration"""
+    await interaction.response.send_message(
+        f"You will be timed out for {duration.total_seconds()} seconds", ephemeral=True
+    )
+    await interaction.user.timeout(duration, reason=reason)
 
 
 async def main():
