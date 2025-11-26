@@ -70,8 +70,9 @@ def owner_only():
 def owner_or_mod():
     async def predicate(interaction: discord.Interaction) -> bool:
         is_mod = interaction.user.get_role(modRoleId) is not None
+        is_owner = interaction.user.id == interaction.guild.owner_id
 
-        if not is_mod:
+        if not is_mod and not is_owner:
             await interaction.response.send_message(
                 "You are not allowed to run that command", ephemeral=True
             )
@@ -159,33 +160,14 @@ async def purge_messages(
             )
 
         else:
-            duration = re.search("\d+[smhd]", ttl)
-            dtime: timedelta | None = None
-            if not duration:
-                # invalid input
-                await interaction.response.send_message(
-                    "Invalid input for TTL.", ephemeral=True
-                )
-            else:
-                duration = duration.group(0)
-                num = re.search("\d+", duration)
-                if "s" in duration:
-                    dtime = timedelta(seconds=int(num.group(0)))
-                elif "m" in duration:
-                    dtime = timedelta(minutes=int(num.group(0)))
-                elif "d" in duration:
-                    dtime = timedelta(days=int(num.group(0)))
-                else:
-                    dtime = timedelta(hours=int(num.group(0)))
-
-                # start / restart task in a channel
-                await set_purge_task_loop(interaction.channel, dtime)
-                print(
-                    f"{datetime.now(timezone.utc)} updated purge task in guild {interaction.guild}"
-                )
-                await interaction.response.send_message(
-                    "Purge loop was set", ephemeral=True
-                )
+            # start / restart task in a channel
+            await set_purge_task_loop(interaction.channel, ttl)
+            print(
+                f"{datetime.now(timezone.utc)} updated purge task in guild {interaction.guild}"
+            )
+            await interaction.response.send_message(
+                "Purge loop was set", ephemeral=True
+            )
     except Exception as e:
         print(e)
         await interaction.response.send_message(
