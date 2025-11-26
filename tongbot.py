@@ -71,8 +71,9 @@ def owner_or_mod():
     async def predicate(interaction: discord.Interaction) -> bool:
         is_mod = interaction.user.get_role(modRoleId) is not None
         is_owner = interaction.user.id == interaction.guild.owner_id
+        is_owner_or_mod = is_mod or is_owner
 
-        if not is_mod and not is_owner:
+        if not is_owner_or_mod:
             await interaction.response.send_message(
                 "You are not allowed to run that command", ephemeral=True
             )
