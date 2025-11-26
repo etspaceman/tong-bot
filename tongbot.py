@@ -122,7 +122,7 @@ async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("pong")
 
 
-@owner_only()
+@owner_or_mod()
 @client.tree.command()
 async def stop_message_purge(interaction: discord.Interaction):
     """Stops the message purge of the current channel"""
