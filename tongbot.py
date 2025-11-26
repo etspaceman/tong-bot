@@ -77,7 +77,7 @@ def owner_or_mod():
             await interaction.response.send_message(
                 "You are not allowed to run that command", ephemeral=True
             )
-        return is_mod
+        return is_owner_or_mod
 
     return app_commands.check(predicate)
 
